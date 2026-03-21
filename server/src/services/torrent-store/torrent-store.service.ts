@@ -28,7 +28,7 @@ export class TorrentStoreService {
         `${env.TORRENT_SERVER_PORT}`,
         '-d',
         env.DOWNLOADS_DIR,
-      ]);
+      ], { stdio: 'inherit' });
     } else {
       let isServerUp = false,
         retryCount = 0;
