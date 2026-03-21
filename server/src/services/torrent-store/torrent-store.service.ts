@@ -1,4 +1,4 @@
-import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { TorrentSourceManager } from '../torrent-source';
 import { TorrentResponse, TorrentStoreStats } from './types';
 import { env } from '@/env';
@@ -10,7 +10,7 @@ import { sleep } from '@/utils/sleep';
 
 export class TorrentStoreService {
   private torrentServerUrl: string = `http://localhost:${env.TORRENT_SERVER_PORT}`;
-  private torrentServerInstance: ChildProcessWithoutNullStreams | null = null;
+  private torrentServerInstance: ChildProcess | null = null;
   private torrentServerSdk: TorrentServerSdk = new TorrentServerSdk(
     this.torrentServerUrl,
   );
