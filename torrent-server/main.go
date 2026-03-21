@@ -3,17 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	bittorrent "github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/types/infohash"
-	rangeparser "github.com/detarkende/stremio-ncore-addon/torrent-server/internal/range-parser"
 	responses "github.com/detarkende/stremio-ncore-addon/torrent-server/internal/responses"
 	gin "github.com/gin-gonic/gin"
 )
@@ -141,61 +140,15 @@ func main() {
 			return
 		}
 
-		if c.Request.Method == "HEAD" {
-			c.Status(http.StatusOK)
-			c.Header("Content-Length", strconv.Itoa(int(targetFile.Length())))
-			c.Header("Content-Type", getContentType(targetFile.Path()))
-			c.Header("Accept-Ranges", "bytes")
-			return
-		}
-
-		// Get file size
-		fileSize := targetFile.Length()
-
-		// Parse range header
-		rangeHeader := c.GetHeader("Range")
-
-		// Create reader and enable responsive mode for seeking support
+		// Create reader with responsive mode for seeking support
 		reader := targetFile.NewReader()
 		defer reader.Close()
 		reader.SetResponsive()
 
-		if rangeHeader == "" {
-			// No Range header: serve the full file with 200 OK
-			c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
-			c.Header("Content-Type", getContentType(filepath))
-			c.Header("Accept-Ranges", "bytes")
-			c.DataFromReader(http.StatusOK, fileSize, getContentType(filepath), reader, nil)
-			return
-		}
-
-		start, end, err := rangeparser.ParseRangeHeader(rangeHeader, fileSize)
-
-		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusRequestedRangeNotSatisfiable)
-			c.Header("Accept-Ranges", "bytes")
-			c.Header("Content-Type", getContentType(filepath))
-			c.Header("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
-			return
-		}
-
-		// Seek to the requested position
-		_, err = reader.Seek(start, io.SeekStart)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Failed to seek to position: %v", err)
-			return
-		}
-
-		// Set headers and stream the range
-		c.Status(http.StatusPartialContent)
-		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
-		c.Header("Accept-Ranges", "bytes")
-		c.Header("Content-Length", fmt.Sprintf("%d", end-start+1))
+		// Use http.ServeContent which handles Range requests, HEAD requests,
+		// Content-Range, If-Range, and all HTTP streaming edge cases automatically
 		c.Header("Content-Type", getContentType(filepath))
-
-		limitedReader := io.LimitReader(reader, end-start+1)
-		c.DataFromReader(http.StatusPartialContent, end-start+1, getContentType(filepath), limitedReader, nil)
+		http.ServeContent(c.Writer, c.Request, targetFile.Path(), time.Time{}, reader)
 	})
 
 	r.Run(":" + strconv.Itoa(port))

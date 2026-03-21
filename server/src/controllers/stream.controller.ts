@@ -6,9 +6,9 @@ import type { StreamService } from '@/services/stream';
 import type { UserService } from '@/services/user';
 import type { TorrentStoreService } from '@/services/torrent-store';
 import { playSchema } from '@/schemas/play.schema';
-import { proxy } from 'hono/proxy';
 import { HttpStatusCode } from '@/types/http';
 import type { TorrentSourceManager } from '@/services/torrent-source';
+import { env } from '@/env';
 
 export class StreamController {
   constructor(
@@ -88,12 +88,9 @@ export class StreamController {
     }
     const file = torrent.files[Number(fileIdx)]!;
 
-    return proxy(
-      this.torrentStoreService.getFileStreamingUrl({
-        infoHash: torrent.infoHash,
-        filePath: file.path,
-      }),
-      { headers: { ...c.req.header() } },
-    );
+    const hostname = new URL(`http://${c.req.header('host')}`).hostname;
+    const filePath = encodeURIComponent(file.path);
+    const redirectUrl = `http://${hostname}:${env.TORRENT_SERVER_PORT}/torrents/${torrent.infoHash}/files/${filePath}`;
+    return c.redirect(redirectUrl, 302);
   }
 }
