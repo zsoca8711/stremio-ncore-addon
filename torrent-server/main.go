@@ -154,6 +154,21 @@ func main() {
 
 		// Parse range header
 		rangeHeader := c.GetHeader("Range")
+
+		// Create reader and enable responsive mode for seeking support
+		reader := targetFile.NewReader()
+		defer reader.Close()
+		reader.SetResponsive()
+
+		if rangeHeader == "" {
+			// No Range header: serve the full file with 200 OK
+			c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
+			c.Header("Content-Type", getContentType(filepath))
+			c.Header("Accept-Ranges", "bytes")
+			c.DataFromReader(http.StatusOK, fileSize, getContentType(filepath), reader, nil)
+			return
+		}
+
 		start, end, err := rangeparser.ParseRangeHeader(rangeHeader, fileSize)
 
 		if err != nil {
@@ -165,24 +180,20 @@ func main() {
 			return
 		}
 
-		// Set headers
-		c.Status(http.StatusPartialContent)
-		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
-		c.Header("Accept-Ranges", "bytes")
-		c.Header("Content-Length", fmt.Sprintf("%d", end-start+1))
-		c.Header("Content-Type", getContentType(filepath))
-
-		// Create reader for the specific range
-		reader := targetFile.NewReader()
-		defer reader.Close()
+		// Seek to the requested position
 		_, err = reader.Seek(start, io.SeekStart)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Failed to seek to position: %v", err)
 			return
 		}
 
-		// Stream the range
-		// Create a limited reader to read only the requested range
+		// Set headers and stream the range
+		c.Status(http.StatusPartialContent)
+		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+		c.Header("Accept-Ranges", "bytes")
+		c.Header("Content-Length", fmt.Sprintf("%d", end-start+1))
+		c.Header("Content-Type", getContentType(filepath))
+
 		limitedReader := io.LimitReader(reader, end-start+1)
 		c.DataFromReader(http.StatusPartialContent, end-start+1, getContentType(filepath), limitedReader, nil)
 	})
